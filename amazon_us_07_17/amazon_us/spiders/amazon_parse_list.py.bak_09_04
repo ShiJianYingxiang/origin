@@ -1,0 +1,118 @@
+# -*- coding: utf-8 -*-
+import scrapy
+import redis
+import re
+import json
+import time
+from amazon_us.items import AmazonUsProductinfoItem
+
+class CategoryGetDetailSpider(scrapy.Spider):
+    name = 'amazon_list_spider'
+
+    headers = {
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en',
+        'Accept-Encoding': 'gzip, deflate',
+        'Host': 'www.amazon.com',
+    }
+    try:
+        url_db = redis.StrictRedis(host='172.21.15.64', port=6379, db=7)
+    except:
+        url_db = None
+    base_key = 'amazon_list_spider'
+    new_category_dict_list = '{}:all_ceshi_list111'.format(base_key)  #
+    nopage_number = '{}:nopage_number'.format(base_key)          #没有翻页总页数的链接
+    totalpage_noproduct_url = '{}:totalpage_noproduct_url_list'.format(base_key)          #总页数有，但是具体到某一页下边没有商品   总页数400，第326页无商品展示----需要去验证
+
+    comment_second_url = "https://www.amazon.com/s?bbn={}&rh={}&s=review-rank&dc&ref=sr_ex_n_1"
+    second_url = "https://www.amazon.com/s?bbn={}&rh={}&s=featured-rank&dc&ref=sr_ex_n_1"
+    detail_name = 'amazon_detail_spider'
+
+    def start_requests(self):
+        while 1:
+            body = self.url_db.lpop("{}:start_urls".format(self.name))
+            if body:
+                if isinstance(body, bytes):
+                    body = body.decode()
+                content = json.loads(body)
+                number = 1
+                category_list = []
+                for keys in content.keys():
+                    if "name" not in keys:
+                        category_list.append("n:" + str(content['c{}'.format(number)]))
+                        number += 1
+                c_count = ",".join(category_list)
+                selector_url = self.second_url.format(content.get('c1'), c_count)
+                comment_url = self.comment_second_url.format(content.get('c1'), c_count)
+                yield scrapy.Request(url=selector_url, headers=self.headers, meta={'category_info': json.dumps(content)},callback=self.parse)
+                yield scrapy.Request(url=comment_url, headers=self.headers, meta={'category_info': json.dumps(content)},callback=self.parse)
+                self.logger.info("爬取链接是{}".format(comment_url))
+                self.logger.info('{}分类开始爬取'.format(content))
+            else:
+                self.logger.info("程序完成, 退出！")
+                break
+
+
+    def parse(self, response):
+
+        category_info = response.meta.get('category_info', '')   #获取传递下来的分类信息
+        self.logger.info("{}开始抓取类别,准备翻页".format(category_info))
+
+        if 'Robot Check' in response.text:
+            self.logger.info('-----------Robot Check----------出现了')
+            return
+        total_page_number = response.xpath('''(//ul[@class="a-pagination"]//li)[last()-1]/text()|(//ul[@class="a-pagination"]//li)[last()-1]/a/text()''').get()   #获取总的页数
+
+        if not total_page_number:
+            self.logger.error('-----链接:{}----没有翻页页数---ERROR----'.format(response.url))
+            self.url_db.lpush(self.nopage_number, response.url)
+            yield scrapy.Request(url=response.url, headers=self.headers, meta={'category_info': category_info, 'total_page_number':'1', 'now_page': '1'}, callback=self.get_all_product)
+        else:
+            self.logger.info('=======分类{}====总页数是{}========='.format(category_info, total_page_number))
+            for item in range(1, int(total_page_number)+1):
+                next_page_url = response.url + '&page=' + str(item)
+                yield scrapy.Request(url=next_page_url, headers=self.headers, meta={'category_info': category_info, 'total_page_number':str(total_page_number), 'now_page': str(item)}, callback=self.get_all_product)
+
+
+    def get_all_product(self, response):
+        now_page = response.meta.get('now_page', '')                     #获取当前页数
+        total_page_number = response.meta.get('total_page_number', '')   #获取总页数
+        category_info = response.meta.get('category_info', '')           #获取传递下来的分类信息
+        self.logger.info('当前是{}分类下---总共有{}页---现在是在第{}页'.format(category_info, total_page_number, now_page))
+
+        if 'featured-rank' in response.url:
+            comment_flag = '精选'
+        else:
+            comment_flag = '评论'
+
+        productid_list = response.xpath('''//div[@class="a-section a-spacing-medium"]//h2//a/@href''').getall()
+        now_page_productid_num = str(len(productid_list))     #当前页面内有多少商品数
+
+        if not productid_list:
+            self.logger.error('-----链接:{}---第{}页无展示商品--------'.format(response.url, now_page))
+            self.url_db.lpush(self.totalpage_noproduct_url, response.url)
+            return
+        else:
+            item = AmazonUsProductinfoItem()
+            category_info = json.loads(category_info)
+            item.update(category_info)
+
+        for product_temp in productid_list:
+            productID = re.findall(r'dp/(\w{10})/', product_temp)
+            if productID:
+                productID = productID[0]
+                item['productID'] = productID                                     #商品id
+                if not self.url_db.sismember("{}:start_urls_set".format(self.detail_name), productID):
+                    self.url_db.sadd("{}:start_urls_set".format(self.detail_name), productID)
+                    self.url_db.lpush("{}:start_urls".format(self.detail_name), productID)
+                item['now_page'] = now_page                                       #该商品所在的页面数
+                item['total_page_number'] = total_page_number                     #该商品分类下总的页面数
+                item['category_info'] = category_info                             #获取传递下来的分类信息
+                item['now_page_productid_num'] = now_page_productid_num           #当前页面内有多少商品数
+                item['comment_featured'] = comment_flag                               #来自评论还是精选
+                item['batch'] = time.strftime('%Y-%m-%d %H') + ':00:00'           #批次
+                item['ctime'] = str(int(time.time()))
+                #self.logger.info(item)
+                yield item
+
