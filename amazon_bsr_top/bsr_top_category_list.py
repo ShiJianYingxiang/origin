@@ -124,7 +124,8 @@ def parse_list(url):
     for bsr_item in bsr_list_info:
         bsr_top_rank = dict()
         bsr_rank = bsr_item.xpath('''.//span[@class="zg-badge-text"]/text()''')[0]  #bsr排名
-
+        if bsr_rank:
+            bsr_rank = bsr_rank.replace('#', '').strip()
         # //ol[@id="zg-ordered-list"]//li//div[contains(@class,"p13n-sc-truncate")]
         bsr_produce_title = bsr_item.xpath('''.//div[contains(@class,"p13n-sc-truncate")]/text()''')[0].strip() #对应的商品title
 
@@ -136,18 +137,25 @@ def parse_list(url):
         try:
             # //ol[@id="zg-ordered-list"]//li//span[@class="p13n-sc-price"]
             bsr_produce_price = bsr_item.xpath('''.//span[@class="p13n-sc-price"]/text()''')[0] #对应的商品价格
+            if bsr_produce_price:
+                bsr_produce_price = bsr_produce_price.replace('$', '').strip()
         except:
             bsr_produce_price = ''
 
         try:
             #//ol[@id="zg-ordered-list"]//li//div[@class="a-icon-row a-spacing-none"]/a[last()]
             bsr_produce_comments = bsr_item.xpath('''.//div[@class="a-icon-row a-spacing-none"]/a[last()]/text()''')[0] #对应的商品评论数
+            if bsr_produce_comments:
+                bsr_produce_comments = bsr_produce_comments.replace(',', '').strip()
         except:
             bsr_produce_comments = ''
 
         try:
             #//ol[@id="zg-ordered-list"]//li//div[@class="a-icon-row a-spacing-none"]/a/@title
             bsr_produce_comments_content = bsr_item.xpath('''.//div[@class="a-icon-row a-spacing-none"]//span/text()''')[0] #对应的商品评论星级
+            if bsr_produce_comments_content:
+                if 'out' in bsr_produce_comments_content:
+                    bsr_produce_comments_content = bsr_produce_comments_content.split('out')[0].strip()
         except:
             bsr_produce_comments_content = ''
 
