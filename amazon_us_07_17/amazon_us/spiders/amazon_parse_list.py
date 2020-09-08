@@ -111,16 +111,20 @@ class CategoryGetDetailSpider(scrapy.Spider):
             item.update(category_info)
 
         for product_temp in productid_list:
-            productID_comments_content = product_temp.xpath('''.//div[@class="a-row a-size-small"]/span[1]/@aria-label''').get()  # 获取商品评论内容
-            # if not productID_comments_content:
-            #     continue
-            # comment_star = re.search('(.*?)\s*out', productID_comments_content).group(1)
-            # if comment_star < '4.0':   #星级数小于4.0的过滤掉
-            #     continue
+            try:
+                productID_comments_content = product_temp.xpath('''.//div[@class="a-row a-size-small"]/span[1]/@aria-label''').get()  # 获取商品评论内容
+                if productID_comments_content:
+                    if 'out' in productID_comments_content:
+                        productID_comments_content = productID_comments_content.split('out')[0].strip()
+            except:
+                productID_comments_content = ''
 
-            productID_comments_nums = product_temp.xpath('''.//div[@class="a-row a-size-small"]/span[2]//span[@class="a-size-base"]/text()''').get()  # 获取商品评论数
-            # if not productID_comments_nums:
-            #     continue
+            try:
+                productID_comments_nums = product_temp.xpath('''.//div[@class="a-row a-size-small"]/span[2]//span[@class="a-size-base"]/text()''').get()  # 获取商品评论数
+                if productID_comments_nums:
+                    productID_comments_nums = productID_comments_nums.replace(',', '').strip()
+            except:
+                productID_comments_nums = ''
             # if int(productID_comments_nums) < 50:  #评论数小于50的过滤掉
             #     continue
 
