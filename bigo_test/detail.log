@@ -1,0 +1,21 @@
+bigo详细信息获取中------------------
+Traceback (most recent call last):
+  File "start_detail.py", line 18, in <module>
+    main()
+  File "start_detail.py", line 14, in main
+    cmdline.execute(generate_spider_cmd("bigo_detail").split())
+  File "/usr/local/lib/python3.8/site-packages/scrapy/cmdline.py", line 142, in execute
+    cmd.crawler_process = CrawlerProcess(settings)
+  File "/usr/local/lib/python3.8/site-packages/scrapy/crawler.py", line 282, in __init__
+    configure_logging(self.settings, install_root_handler)
+  File "/usr/local/lib/python3.8/site-packages/scrapy/utils/log.py", line 101, in configure_logging
+    install_scrapy_root_handler(settings)
+  File "/usr/local/lib/python3.8/site-packages/scrapy/utils/log.py", line 111, in install_scrapy_root_handler
+    _scrapy_root_handler = _get_handler(settings)
+  File "/usr/local/lib/python3.8/site-packages/scrapy/utils/log.py", line 127, in _get_handler
+    handler = logging.FileHandler(filename, encoding=encoding)
+  File "/mnt/data/weidong.shi/Python-3.8.3/Lib/logging/__init__.py", line 1143, in __init__
+    StreamHandler.__init__(self, self._open())
+  File "/mnt/data/weidong.shi/Python-3.8.3/Lib/logging/__init__.py", line 1172, in _open
+    return open(self.baseFilename, self.mode, encoding=self.encoding)
+FileNotFoundError: [Errno 2] No such file or directory: '/mnt/data/weidong.shi/project/bigo_test/log/scrapy_2020_9_10.log'
