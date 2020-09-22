@@ -19,6 +19,7 @@ import os
 1.解析每个榜单链接的信息
 2.并将获取的商品id进行保存
 
+2020-09-21: 修改URL提取规则，更新分类信息
 '''
 monkey.patch_all()
 exe_pool = pool.Pool(100)
@@ -96,30 +97,28 @@ def clear_special_xp(data, xp):
     return data
 
 
-def parse_list(url):
+def parse_list(url, product_data):
+
     resp = download(url)
 
     bt_time = time.strftime('%Y-%m-%d')
-    categoryid = re.search('zgbs/(.*?)/', url).group(1)
+    # categoryid = re.search('zgbs/(.*?)/', url).group(1)
 
     try:
         content = etree.HTML(resp.text)
         content = clear_special_xp(content, '//style|//script')  # 去除杂质
-    except:
-        if not url_db.sismember('amazon_category_bsrtop:failed_urls_set', url):
-            url_db.sadd('amazon_category_bsrtop:failed_urls_set', url)
-            url_db.lpush("amazon_category_bsrtop:failed_urls_list", url)
-        return
+    except Exception as e:
+        print(e)
+        # if not url_db.sismember('amazon_category_bsrtop:failed_urls_set', url):
+        #     url_db.sadd('amazon_category_bsrtop:failed_urls_set', url)
+        #     url_db.lpush("amazon_category_bsrtop:failed_urls_list", url)
+        # return
 #   解析列表的信息  |
     bsr_top_name = content.xpath('''//div[@id="zg"]//h1/text()''')[0] + content.xpath('''//div[@id="zg"]//h1//span/text()''')[0]  # bsr_top的名称
 
     bsr_list_info = content.xpath('''//ol[@id="zg-ordered-list"]//li''')
 
-    print('---{}正在抓取{},显示个数是{}---'.format(time.strftime('%Y-%m-%d %H:%M:%S'), url, len(bsr_list_info)))
-    # if len(bsr_list_info) != 50:
-    #     if not url_db.sismember('amazon_category_bsrtop:failed_urls_set', url):
-    #         url_db.sadd('amazon_category_bsrtop:failed_urls_set', url)
-    #         url_db.lpush("amazon_category_bsrtop:failed_urls_list", url)
+    print('---{}---正在抓取{},显示个数是{}---'.format(time.strftime('%Y-%m-%d %H:%M:%S'), url, len(bsr_list_info)))
 
     for bsr_item in bsr_list_info:
         bsr_top_rank = dict()
@@ -167,12 +166,14 @@ def parse_list(url):
         bsr_top_rank['bsr_produce_price'] = bsr_produce_price   #对应的商品价格
         bsr_top_rank['bsr_produce_comments'] = bsr_produce_comments   #对应的商品评论数
         bsr_top_rank['bsr_produce_comments_content'] = bsr_produce_comments_content  #对应的商品评论星级
-        bsr_top_rank['category_id'] = categoryid  #对应的商品评论星级
+        bsr_top_rank['category_id'] = product_data  #对应的商品评论ID
         bsr_top_rank['bt_time'] = bt_time
         bsr_top_rank['crawler_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))  # 采集时间
 
         with open('/mnt/data/weidong.shi/file/amazon/bsrtop_rank/bsrtop_list_info_' + time.strftime('%Y-%m-%d') + '.txt', 'a+', encoding="utf-8") as file:
+        # with open(time.strftime('%Y-%m-%d') + '.txt', 'a+', encoding="utf-8") as file:
             file.write(json.dumps(bsr_top_rank) + '\n')
+
 
         #将商品id存储在redis中
         product_info = {}
@@ -187,11 +188,19 @@ def parse_list(url):
 def get_data():
     job = []
     print('start_time:{}'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
-    redis_dict_list = url_db.lrange('amazon_category_bsrtop:urls_list', 0, -1)  #
+    # redis_dict_list = url_db.lrange('amazon_category_bsrtop:urls_list', 0, -1)  #
+    redis_dict_list = url_db.lrange('amazon_category_bsrtop:urls_list', 0, 2)  #
     for redis_dict in redis_dict_list:
         if isinstance(redis_dict, bytes):
             bsr_top_url = redis_dict.decode()
-            job.append(exe_pool.spawn(parse_list, bsr_top_url))
+            product_data = json.loads(bsr_top_url)
+            # print(product_data, type(product_data))
+            category_data = product_data.get('category', '')
+            url_1 = product_data.get('url_1', '')
+            job.append(exe_pool.spawn(parse_list, url_1, category_data))
+
+            url_2 = product_data.get('url_2', '')
+            job.append(exe_pool.spawn(parse_list, url_2, category_data))
     gevent.joinall(job)
 
 
