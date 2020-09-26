@@ -17,7 +17,7 @@ import os
 '''
 通过对应分类，拼接bsrtop的url
 格式化bsrtop的链接
-2020-09-21: 添加URL，对应的分类信息
+2020-09-21: 添加URL，对应的分类信息sdfafdas
 '''
 try:
     url_db = redis.StrictRedis(host='172.21.15.64', port=6379, db=7)
