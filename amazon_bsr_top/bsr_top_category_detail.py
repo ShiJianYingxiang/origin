@@ -18,7 +18,7 @@ import os
 对通过bsrtop获取的商品id，进行解析
 '''
 monkey.patch_all()
-exe_pool = pool.Pool(50)
+exe_pool = pool.Pool(80)
 
 redishandler = redis.Redis(host='172.21.15.57', port=6379, db=12)
 PROXY_KEY = "pycrawler_proxies:dly"
@@ -214,9 +214,7 @@ def parse_list(url, product_data):
 
     if 'Robot Check' in title_flag:
         print('======Robot Check出现了=={}================'.format(pid))
-        if not url_db.sismember('amazon_category_bsrtop:failed_urls_set', json.dumps(product_data)):
-            url_db.sadd('amazon_category_bsrtop:failed_urls_set', json.dumps(product_data))
-            url_db.lpush("amazon_category_bsrtop:failed_urls_list", json.dumps(product_data))
+
 
     # 价格
     try:
@@ -224,8 +222,7 @@ def parse_list(url, product_data):
             price = ''  # 无货
             sale_status = 2
         else:
-            price = content.xpath('''//div[@id="buyNew_noncbb"]//span/text()|//div[@id="cerberus-data-metrics"]//@data-asin-price|//div[@id="price"]//span[@id="priceblock_ourprice"]/text()|//span[@id="price_inside_buybox"]/text()''')[
-                0]
+            price = content.xpath('''//div[@id="buyNew_noncbb"]//span/text()|//div[@id="cerberus-data-metrics"]//@data-asin-price|//div[@id="price"]//span[@id="priceblock_ourprice"]/text()|//span[@id="price_inside_buybox"]/text()''')[0]
             sale_status = 1
     except:
         print('@@@@@@价格有问题{}@@@@@@@@@@@@@@@'.format(pid))
@@ -237,9 +234,16 @@ def parse_list(url, product_data):
     else:
         if '$' not in price:
             price = '$' + price
-    # print('@@@@@@{}@@@@@@@@@'.format(price))
+    price = price.replace('$', '').strip()   #替换掉价格标签符号
 
     brand_name = content.xpath('''//a[@id="bylineInfo"]/text()''')[0]
+    brand_name = brand_name.replace('brand_name', '').strip()
+    # 图片
+    images_content = content.xpath('''//div[@id="altImages"]//ul//li//img//@src''')  # .getall()
+    images = [x.strip() for x in images_content]
+
+    crawler_tm = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))  # 采集时间
+
 
     shop_url = content.xpath('''//a[@id="bylineInfo"]/@href''')[0]
     if shop_url:
@@ -248,7 +252,7 @@ def parse_list(url, product_data):
         else:
             shop_url = ''
 
-    # 商品评分/好评率
+    # 商品评分/好评率---评分内容获取前面的数字|评论数替换成数字
     if 'acrPopover' in resp.text:
         star_score_content = content.xpath('''(//span[@id="acrPopover"])[1]//@title''')[0]
         if star_score_content:
@@ -257,32 +261,25 @@ def parse_list(url, product_data):
             else:
                 score = ''
                 print('------score_xpath错误---{}---------')
-        comments_num_content = \
-        content.xpath('''(//a[@id="acrCustomerReviewLink"]//span[@id="acrCustomerReviewText"])[1]/text()''')[0]
+        comments_num_content = content.xpath('''(//a[@id="acrCustomerReviewLink"]//span[@id="acrCustomerReviewText"])[1]/text()''')[0]
         if comments_num_content:
-            comment_count = comments_num_content.replace('ratings', '').strip()
+            comment_count = comments_num_content.replace('ratings', '').replace(',', '').strip()
     else:
         print('======={}没有评论==============='.format(pid))
         comment_count = 0
         score = ''
 
-    # 各个星级对应的比例
+    #评论中各个星级对应的比例
+    star_dict = dict()
     star_level = content.xpath('''//table[@id="histogramTable"]//tr//td[1]//a/text()''')
     star_proportion = content.xpath('''//table[@id="histogramTable"]//tr//td[3]//a/text()''')
-    star_dict = dict()
     for x, y in zip(star_level, star_proportion):
         x = x.strip()
         y = y.strip()
         star_dict[x] = y
 
-    # 图片
-    images_content = content.xpath('''//div[@id="altImages"]//ul//li//img//@src''')  # .getall()
-    images = [x.strip() for x in images_content]
-
-    crawler_tm = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))  # 采集时间
-
+    #################解析bsr部分#################
     summary_content = dict()
-
     summary_key_list_ = content.xpath('''//table[@id="productDetails_techSpec_section_1"]//tr''')  # .getall()
     for item in summary_key_list_:
         key = item.xpath('''./th/text()''')
@@ -296,10 +293,9 @@ def parse_list(url, product_data):
             k = k.replace('\n', '').replace(' ', '')
             summary_content[k] = v
 
-    # **********************************
     sellers_rank = dict()
     list_ = content.xpath(
-        '//table[@id="productDetails_d：:qetailBullets_sections1"]//tr|//table[@id="product-specification-table"]//tr')
+        '//table[@id="productDetails_detailBullets_sections1"]//tr|//table[@id="product-specification-table"]//tr')
     for item in list_:
         key = item.xpath('''./th/text()''')
         value = item.xpath('''./td//text()''')
@@ -325,8 +321,7 @@ def parse_list(url, product_data):
 
     # -------添加其他参数------------
     other_dict = dict()
-    other_style_list1 = content.xpath(
-        '''//div[@id="descriptionAndDetails"]//div[@id="detailBullets_feature_div"]//ul//li''')
+    other_style_list1 = content.xpath('''//div[@id="descriptionAndDetails"]//div[@id="detailBullets_feature_div"]//ul//li''')
     for item1 in other_style_list1:
         item_key_list = item1.xpath('''.//span[@class="a-list-item"]/span[@class="a-text-bold"]/text()''')
         item_value_list = item1.xpath('''(.//span[@class="a-list-item"]/span)[2]/text()''')
@@ -352,7 +347,38 @@ def parse_list(url, product_data):
     summary_content.update(other_dict)
     summary_content.update(sellers_rank)
 
-    if 'Sellers Rank' in resp.text:
+    # add--->新bsr(B000XEV9YE|B004TRUDSO|B084VLHXWH)
+    # other_bsr = dict()
+    # xx = ''
+    # other_bsr_parse = content.xpath('''//ul[contains(@class,"detail-bullet-list")]//a[contains(@href,'bestsellers')]''')
+    # for other_bsr_item in other_bsr_parse:
+    #     value = other_bsr_item.xpath('''./../text()''')[0] + other_bsr_item.xpath('''./text()''')[0]
+    #     if value:
+    #         xx += value
+    # if xx:
+    #     other_bsr['BestSellersRank'] = xx
+    #     summary_content.update(other_bsr)
+
+    other_bsr = dict()
+    xx = ''
+    other_bsr_parse = content.xpath('''//ul[contains(@class,"detail-bullet-list")]//span[contains(@class,"a-list-item")]/text()|//ul[contains(@class,"detail-bullet-list")]//a[contains(@href,'bestsellers')]/text()''')
+    for other_bsr_item in other_bsr_parse:
+        xx += other_bsr_item.replace('\n', '')
+    if xx:
+        other_bsr['BestSellersRank'] = xx
+        summary_content.update(other_bsr)
+
+    other_bsr1 = dict()
+    xx = ''
+    other_bsr_parse = content.xpath('''//li[@id="SalesRank"]/text()|//li[@id="SalesRank"]/a/text()|//ul[@class="zg_hrsr"]//span/text()|//ul[@class="zg_hrsr"]//span/a/text()''')
+    for other_bsr_item in other_bsr_parse:
+        xx += other_bsr_item.replace('\n', '')
+    if xx:
+        other_bsr1['BestSellersRank'] = xx
+        summary_content.update(other_bsr1)
+
+
+    if 'Sellers Rank' in resp.text or 'sellers rank' in resp.text:
         if 'BestSellersRank' in summary_content.keys():
             bsr = summary_content.get('BestSellersRank', '')
         else:
@@ -361,9 +387,10 @@ def parse_list(url, product_data):
     else:
         bsr = ''
         print('----{}----没有BestSellersRank'.format(pid))
-        # if not url_db.sismember('amazon_category_bsrtop:no_bsr_set', json.dumps(product_data)):
-        #     url_db.sadd('amazon_category_bsrtop:no_bsr_set', json.dumps(product_data))
-        #     url_db.lpush('amazon_category_bsrtop:no_bsr_list', json.dumps(product_data))
+        if not url_db.sismember('amazon_category_bsrtop:failed_urls_set', json.dumps(product_data)):
+            url_db.sadd('amazon_category_bsrtop:failed_urls_set', json.dumps(product_data))
+            url_db.lpush("amazon_category_bsrtop:failed_urls_list", json.dumps(product_data))
+        return None
     print('%%%%%%%%%%%%%%%%{}%%%%%%%%%%%%%%%%%%%'.format(bsr))
 
     # 2020_07_27--swd_add_marketplaceID--
@@ -397,9 +424,19 @@ def parse_list(url, product_data):
     sku_list = ''  # sku商品列表
     brand_id = ''  # 品牌id
     batch_tm = product_data.get('batch_time', '')  # 批次时间  #####
-    # 未找到的字段
+    # 未找到的字段---添加商品列表解析
+    sku_list = []  # sku商品列表
     sku_id = ''
-    spu_id = ''  #
+    try:
+        spu_id = re.search('parentAsin\s*[\"\']\s*[:：]\s*[\"\']\s*(\w{10})\s*[\"\']\s*', resp.text).group(1)
+        if spu_id:
+            sku_id_content = re.search('dimensionToAsinMap\s*[\"\']\s*[:：]\s*(.*?})\s*,', resp.text).group(1)
+            sku_id_dict = json.loads(sku_id_content)
+            for sku_id in sku_id_dict.values():
+                sku_list.append(sku_id)
+    except:
+        spu_id = pid
+        sku_list = []
     model = ''  # 款式参数
     support = ''  # 是否自营
     sales_count = ''  # 总销量
@@ -459,7 +496,7 @@ def parse_list(url, product_data):
     content_dict['bsr'] = bsr
     content_dict.update(category_tree)
     # print(content_dict)
-    url_db.lpush('amazon_category_bsrtop:detail_successful_list', pid)
+    url_db.lpush('amazon_category_bsrtop:detail_successful_list', json.dumps(product_data))
     #
     with open('/mnt/data/weidong.shi/file/amazon/product_info/bsrtop_product_info_' + time.strftime(
             '%Y-%m-%d') + '_' + str(os.getpid()) + '.txt', 'a+', encoding='utf-8') as ff:

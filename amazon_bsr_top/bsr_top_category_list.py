@@ -179,9 +179,9 @@ def parse_list(url, product_data):
         product_info = {}
         product_info['pid'] = bsr_produce_id
         product_info['batch_time'] = bt_time
-        product_info['source'] = 'bsr_parse'
-        if not url_db.sismember('amazon_category_bsrtop:produce_id_set', json.dumps(product_info)):
-            url_db.sadd('amazon_category_bsrtop:produce_id_set', json.dumps(product_info))
+
+        if not url_db.sismember('amazon_category_bsrtop:produce_id_set', bsr_produce_id):
+            url_db.sadd('amazon_category_bsrtop:produce_id_set', bsr_produce_id)
             url_db.lpush("amazon_category_bsrtop:produce_id_list", json.dumps(product_info))
 
 
@@ -189,7 +189,7 @@ def get_data():
     job = []
     print('start_time:{}'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
     # redis_dict_list = url_db.lrange('amazon_category_bsrtop:urls_list', 0, -1)  #
-    redis_dict_list = url_db.lrange('amazon_category_bsrtop:urls_list', 0, 2)  #
+    redis_dict_list = url_db.lrange('amazon_category_bsrtop:urls_list', 0, -1)  #
     for redis_dict in redis_dict_list:
         if isinstance(redis_dict, bytes):
             bsr_top_url = redis_dict.decode()

@@ -46,11 +46,12 @@ for redis_dict in redis_dict_list:
         cd = product_data.get(temp, '')
         cd_name = product_data.get(temp_name, '')
         # if ' & ' in cd_name or '' in cd_name or '' in cd_name or '' in cd_name or '' in cd_name
-        cd_name = cd_name.replace(' & ', '-').replace(', ', '-').replace(' ', '-').replace('(', '').replace(')', '').replace(' & ', '')
+        cd_name = cd_name.replace(' & ', '-').replace(', ', '-').replace(' ', '-').replace('(', '').replace(')', '')
         cd_url = base_url.format(cd_name, cd)
         data['url_1'] = cd_url
         data['url_2'] = cd_url + '?&pg=2'
     data['category'] = product_data
+    print('----{}----'.format(data))
     if not url_db.sismember("amazon_category_bsrtop:urls_set", json.dumps(data)):
         url_db.sadd("amazon_category_bsrtop:urls_set", json.dumps(data))
         url_db.lpush("amazon_category_bsrtop:urls_list", json.dumps(data))
